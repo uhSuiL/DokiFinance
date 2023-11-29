@@ -4,16 +4,17 @@
 - [x] ~~deploy mongodb on the surface3(server)~~
 - [x] install edge-browser on the surface3
 - [x] deploy prometheus on surface3 to monitor the host
-- [ ] write the crawler for stock metadata
-- [ ] write the crawler for stock data
+- [x] write the crawler for stock metadata
+- [x] write the crawler for stock data
 - [ ] write the crawler for daily tick trading event
 - [ ] write the crawler for stock comments and news in "guba"
 - [ ] write the crawler for stock reports(text)
 - [ ] write the crawler for news and comment in weibo
 - [x] deploy postgresql and create tables
-- [ ] find how to get the past kline data
+- [x] find how to get the past kline data
 - [ ] write `clean_all` log in `util.Log`
 - [x] find out a management of  `id` of `Worker` and `Task` 
+- [ ] check the validity for meta crawler
 - [ ] check the validity for stocks quit from market
 
 

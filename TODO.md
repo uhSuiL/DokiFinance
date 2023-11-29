@@ -14,6 +14,7 @@
 - [ ] find how to get the past kline data
 - [ ] write `clean_all` log in `util.Log`
 - [x] find out a management of  `id` of `Worker` and `Task` 
+- [ ] check the validity for stocks quit from market
 
 
 # Operation Log

@@ -122,6 +122,8 @@ field = {
 
 
 class CrawlMeta(Task):
+	# refer: https://blog.csdn.net/qq_41335232/article/details/115514937
+
 	page_url = "https://quote.eastmoney.com/center/gridlist.html#hs_a_board"
 
 	# to fill: randint, timestamp, num_subpage, size, timestamp

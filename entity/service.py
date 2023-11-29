@@ -2,7 +2,7 @@ import abc
 import time
 import logging
 
-from multiprocessing import Queue
+from multiprocessing import Queue, Value, Lock
 from typing import Callable
 
 
@@ -37,14 +37,25 @@ class Register(dict):
 
 
 class Task(abc.ABC):
-	def __init__(self, queue: Queue, _id: str = "", callbacks: list[Callable] = None):
+
+	instance_count = Value('i', 0)
+	instance_count_lock = Lock()
+
+	@classmethod
+	def count_instance(cls):
+		with cls.instance_count_lock:
+			return cls.instance_count.value
+
+	def __init__(self, msg_queue: Queue, callbacks: list[Callable] = None):
 		"""Task (Function)
 
 			We recommend using callable object to replace pure function for long-time task.
 			Task can auto record the start, end, error of a task, and put it to Manager for log
 		"""
-		self.queue = queue
-		self._id = _id
+		self.queue = msg_queue
+		with Task.instance_count_lock:
+			self._id = self.__class__.__name__ + '_' + str(Task.instance_count.value)
+			Task.instance_count.value += 1
 
 		if callbacks is not None:
 			i = 0
@@ -80,9 +91,31 @@ class Task(abc.ABC):
 		raise NotImplementedError
 
 
-class Worker:
-	def __init__(self):
+class Worker(abc.ABC):
+
+	instance_count = Value('i', 0)
+	instance_count_lock = Lock()
+
+	@classmethod
+	def count_instance(cls):
+		with cls.instance_count_lock:
+			return cls.instance_count.value
+
+	task_list: list
+
+	def __init__(self, queue: Queue, config: dict):
+		self.queue = queue
+		self.config = config
+
+		with Worker.instance_count_lock:
+			self._id = self.__class__.__name__ + '_' + Worker.instance_count.value
+			Worker.instance_count.value += 1
+
+	def __call__(self, *args, **kwargs):
 		...
+
+	def start(self):
+		raise NotImplementedError
 
 
 class Manager:

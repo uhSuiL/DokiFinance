@@ -18,6 +18,7 @@
 - [x] find out a management of  `id` of `Worker` and `Task` 
 - [ ] check the validity for meta crawler
 - [ ] check the validity for stocks quit from market
+- [ ] refactor crawlers: abstract a crawler entity
 
 
 # Operation Log

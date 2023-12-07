@@ -6,6 +6,8 @@ import requests
 import numpy as np
 
 from requests import HTTPError
+from lxml import etree
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from multiprocessing import Queue
 from entity.service import Task
@@ -248,9 +250,133 @@ class CrawlKline(Task):
 				data = self.parse_data(data)
 				data_queue.put(("kline", "insert", data))  # table_name, operation, data
 		except HTTPError or ValueError or UnicodeError:
-			raise RuntimeError(f"""{self._id} Failed: """)
+			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
+
+
+class CrawlGubaTable(Task):
+
+	guba_table_url = "https://guba.eastmoney.com/list,%d,99.html"  # to fill: stock_code
+
+	def get_resp(self, stock_code: int, request_config: dict):
+		url = self.guba_table_url.format(stock_code)
+		resp = requests.get(url, **request_config)
+		if resp.status_code != 200:
+			raise HTTPError(f"get_resp@{self._id}: Invalid response, status code={resp.status_code}")
+		return resp
+
+	def parse_guba_table(self, html_text: str) -> dict:
+		html = etree.HTML(html_text)
+		if html is None:
+			raise ValueError(f"get_resp@{self._id}: Empty data")
+
+		# 分别爬取read, reply, title&data-postid&href, author&href, update
+		# ATTENTION: 这里的爬取策略不是很安全
+		nums_read = [elem.text for elem in html.xpath("//td/div[@class='read']")]
+		nums_reply = [elem.text for elem in html.xpath("//td/div[@class='reply']")]
+		update_times = [elem.text for elem in html.xpath("//td/div[@class='update']")]
+
+		titles = [(elem.get("data-postid"), elem.get("href"), elem.text)
+				  for elem in html.xpath("//td/div[@class='title']/a")]
+		authors = [(elem.get("href"), elem.text) for elem in html.xpath("//td/div[@class='author']/a")]
+
+		if not (len(nums_reply) == len(nums_read) == len(update_times) == len(titles) == len(authors)):
+			raise ValueError(f"parse_guba_table@{self._id}: \
+				length mismatch: {len(nums_read), len(nums_reply), len(update_times), len(titles), len(authors)}")
+
+		return {
+			'num_read': nums_read,
+			'nums_reply': nums_reply,
+			'titles': titles,
+			'authors': authors
+		}
+
+	def parse_jquery(self, resp) -> dict:
+		match = re.search(r'\((.*?)\)', resp.content.decode(encoding='utf-8'))
+		json_content = match.group(1)
+		if json_content is None or json_content == "":
+			raise ValueError(f"parse_resp@{self._id}: Empty content in resp")
+		data = json.loads(json_content)
+		return data
+
+	def run(self, params: list, request_config: dict = None):
+		request_config = {} if request_config is None else request_config
+		try:
+			tables = []
+			for param in params:
+				resp = self.get_resp(*param, request_config=request_config)
+				table = self.parse_guba_table(resp.text)
+				tables.append(table)
+			return tables  # 这里直接返回 -- 所有爬文章的任务都得等到获取了所有表才行
+		except HTTPError or ValueError or UnicodeError:
+			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
+
+
+class CrawlArticle(Task):
+
+	# 会有2种情况:
+	# 	1. 评论reply太多时，需要“点击查看全部” -> https://guba.eastmoney.com/api/getData?code=300255&path=reply/api/Reply/ArticleReplyDetail
+	# 	2. 评论reply内容太长时，需要“展开”
+	# 	3. 评论可能需要翻页 -> get新的html即可
+	# 	4. 评论reply太多时，需要翻页 -> 好像可以走api post拿到一条comment的所有reply
+	# 	5. 评论太长需要“展开阅读全文”
+	# 	6. 文本清洗：处理好emoji和各种引用（如@用户或股票）
+
+	# 爬取逻辑
+	# 	（爬帖子）
+	# 	从股吧表获取信息: 阅读数量，评论数量，post_id，用户（，用户href）
+	# 	构造出完整的消息页面（根据post_id）
+	# 	检查是否需要“展开阅读全文”，如果需要，则交给driver点击后返回页面
+	#	从页面中获取帖子文字内容，过滤表情包和@信息
+	# 	---
+	# 	（爬评论和评论的评论）
+
+	# ATTENTION:
+	# 	改爬"财富号"，好像不用传driver
+
+	# comment_page = f"https://guba.eastmoney.com/news,{300255},{1375413310}.html"
+	# TODO: 检查文章是否有需要翻页的
+
+	def get_resp(self, href: str, request_config: dict) -> requests.Response:
+		"""
+			href: 来自guba_table的title里的href, 用于爬取article
+		"""
+		resp = requests.get(href, **request_config)
+		if resp.status_code != 200:
+			raise HTTPError(f"get_resp@{self._id}: Invalid response, status code={resp.status_code}")
+		return resp
+
+	def get_article(self, html_text: str) -> str:
+		if html_text is None:
+			raise ValueError(f"get_article@{self._id}: Empty html_text")
+
+		# 可以直接过滤(转换)表情包和引用
+		soup = BeautifulSoup(html_text, 'html.parser')
+		article = ""
+		for p in soup.find_all('p'):
+			article += p.text + '\n'
+		article = re.sub(r"\xa0", '', article)
+		article = re.sub("\n本文作者可以追加内容哦 !\n\n\r", '', article)
+		return article
+
+	def run(self, hrefs: list, request_config: dict):
+		request_config = {} if request_config is None else request_config
+		try:
+			for href in hrefs:
+				...
+		except HTTPError or ValueError or UnicodeError:
+			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
 
 
 class CrawlComment(Task):
+	# TODO: 爬取post和它的comment，并把数据传给队列（用于传入数据库）
+
+	def parse_jquery_text(self, jquery_text: str) -> str:
+		match = re.search(r'\((.*?)\)', jquery_text)
+		json_content = match.group(1)
+		if json_content is None or json_content == "":
+			raise ValueError(f"parse_jquery_text@{self._id}: Empty content in jquery_text")
+		data = json.loads(json_content)
+		return data
+
 	def run(self, *args, **kwargs):
 		...

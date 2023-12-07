@@ -358,11 +358,13 @@ class CrawlArticle(Task):
 		article = re.sub("\n本文作者可以追加内容哦 !\n\n\r", '', article)
 		return article
 
-	def run(self, hrefs: list, request_config: dict):
+	def run(self, hrefs: list, data_queue: Queue, request_config: dict):
 		request_config = {} if request_config is None else request_config
 		try:
 			for href in hrefs:
-				...
+				resp = self.get_resp(href, request_config)
+				article = self.get_article(resp.text)
+				data_queue.put(("article", "insert", article))
 		except HTTPError or ValueError or UnicodeError:
 			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
 

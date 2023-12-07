@@ -7,7 +7,9 @@
 - [x] write the crawler for stock metadata
 - [x] write the crawler for stock data
 - [ ] write the crawler for daily tick trading event
-- [ ] write the crawler for stock comments and news in "guba"
+- [ ] write the crawler for stock articles in "eastmoney guba"
+- [ ] write the crawler for comments of articles in "eastmoney guba"
+- [ ] write the crawler for stock news in eastmoney
 - [ ] write the crawler for stock reports(text)
 - [ ] write the crawler for news and comment in weibo
 - [x] deploy postgresql and create tables

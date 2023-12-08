@@ -3,6 +3,7 @@
 - [x] reinstall u18 for surface3
 - [x] ~~deploy mongodb on the surface3(server)~~
 - [x] install edge-browser on the surface3
+- [x] fix the ip of surface3
 - [x] deploy prometheus on surface3 to monitor the host
 - [x] write the crawler for stock metadata
 - [x] write the crawler for stock data

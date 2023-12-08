@@ -23,9 +23,6 @@ class Register(dict):
 		self.__name = None
 		return func
 
-	# def wrapper(self, *args, **kwargs):
-	# 	return self.__func(*args, **kwargs)
-
 	def __call__(self, target: str = None):
 		if type(target) is str:
 			self.__name = target

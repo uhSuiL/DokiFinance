@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from multiprocessing import Queue
 from entity.service import Task
+from entity.crawler import Crawler
+from util.crawl import is_empty
 
 field = {
 	'时间戳': 'f1',
@@ -311,7 +313,7 @@ class CrawlGubaTable(Task):
 			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
 
 
-class CrawlArticle(Task):
+class CrawlArticle(Crawler):
 
 	# 会有2种情况:
 	# 	1. 评论reply太多时，需要“点击查看全部” -> https://guba.eastmoney.com/api/getData?code=300255&path=reply/api/Reply/ArticleReplyDetail
@@ -336,14 +338,8 @@ class CrawlArticle(Task):
 	# comment_page = f"https://guba.eastmoney.com/news,{300255},{1375413310}.html"
 	# TODO: 检查文章是否有需要翻页的
 
-	def get_resp(self, href: str, request_config: dict) -> requests.Response:
-		"""
-			href: 来自guba_table的title里的href, 用于爬取article
-		"""
-		resp = requests.get(href, **request_config)
-		if resp.status_code != 200:
-			raise HTTPError(f"get_resp@{self._id}: Invalid response, status code={resp.status_code}")
-		return resp
+	# 爬取文章的like数量
+	article_like_api = f"https://caifuhao.eastmoney.com/v1/ArticleAndReplyLikeInfo?postid={'%d'}"
 
 	def get_article(self, html_text: str) -> str:
 		if html_text is None:
@@ -358,27 +354,63 @@ class CrawlArticle(Task):
 		article = re.sub("\n本文作者可以追加内容哦 !\n\n\r", '', article)
 		return article
 
-	def run(self, hrefs: list, data_queue: Queue, request_config: dict):
+	def crawl(self, hrefs: list[str], post_ids: list[int], stock_ids: list[int], data_queue: Queue, request_config: dict):
+		assert len(hrefs) == len(post_ids), (len(hrefs), len(post_ids))
 		request_config = {} if request_config is None else request_config
-		try:
-			for href in hrefs:
-				resp = self.get_resp(href, request_config)
-				article = self.get_article(resp.text)
-				data_queue.put(("article", "insert", article))
-		except HTTPError or ValueError or UnicodeError:
-			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
+
+		for i in range(len(hrefs)):
+			href = hrefs[i]
+			resp = self.get_resp(href, request_config)
+			article = self.get_article(resp.text)
+
+			api = self.article_like_api.format(post_ids)
+			resp = self.get_resp(api, request_config)
+			post_like_data = self.parse_jquery_text(resp.content.decode(encoding='utf-8'))
+
+			data_queue.put(("article", "insert", (stock_ids[i], article, post_like_data['post_like_info']['post_like_count'])))
 
 
-class CrawlComment(Task):
-	# TODO: 爬取post和它的comment，并把数据传给队列（用于传入数据库）
+class CrawlComment(Crawler):
 
-	def parse_jquery_text(self, jquery_text: str) -> str:
-		match = re.search(r'\((.*?)\)', jquery_text)
-		json_content = match.group(1)
-		if json_content is None or json_content == "":
-			raise ValueError(f"parse_jquery_text@{self._id}: Empty content in jquery_text")
-		data = json.loads(json_content)
-		return data
+	# json结构:
+	# 	re: [] 这一页所有的comment
+	# 		reply_text
+	# 		reply_time
+	# 		user_id
+	#		child_replys: [], 对comment的reply
 
-	def run(self, *args, **kwargs):
-		...
+	# to fill: time_stamp, post_id, page_num, ps, time_stamp
+	comment_api = """https://gbapi.eastmoney.com/reply/JSONP/ArticleNewReplyList?"""
+	f"""callback=jQuery183003076189415166386_{'%d'}&plat=web&version=300&product=guba&"""
+	f"""h=a73bfb37b81c3b05b8f7b22bbfc11422&"""
+	f"""postid={"%d"}&sort=1&sorttype=1&p={"%d"}&ps={"%d"}&type=0&_={'%d'}"""
+
+	# 从json中提取并整理所需要的数据
+	def get_data(self, data: dict) -> list:
+		if is_empty(data):
+			raise ValueError(f"get_data@{self._id}: Empty Data")
+		reply_text = data['reply_text']
+		reply_time = data['reply_time']
+		reply_like_count = data['reply_like_count']
+		reply_id = data['reply_id']
+		reply_user_name = data['reply_user']['user_nickname']
+		reply_user_id = data['reply_user']['user_id']
+		return [reply_text, reply_time, reply_like_count, reply_id, reply_user_name, reply_user_id]
+
+	def crawl(self, param_list: list[tuple], request_config: dict, data_queue: Queue):
+		for post_id, page_num, ps in param_list:
+			now = int(time.time())
+			url = self.comment_api.format(now, post_id, page_num, ps, now)
+			resp = self.get_resp(url, request_config)
+			jquery_text = resp.content.decode(encoding='utf-8')
+			data = self.parse_jquery_text(jquery_text)
+
+			for reply in data['re']:  # re包含所有回复信息
+				reply_data = self.get_data(reply)
+				data_queue.put(("comment", "insert", [post_id] + reply_data))
+
+				reply_id = reply_data[3]
+				child_replies = reply['child_replys']
+				for child_reply in child_replies:
+					child_reply_data = self.get_data(child_reply)
+					data_queue.put(("comment", "insert", [reply_id] + child_reply_data))

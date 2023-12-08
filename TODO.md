@@ -8,17 +8,21 @@
 - [x] write the crawler for stock data
 - [x] deploy postgresql and create tables
 - [x] find how to get the past kline data
-- [ ] write the crawler for daily tick trading event
-- [ ] write the crawler for stock articles in "eastmoney guba"
-- [ ] write the crawler for comments of articles in "eastmoney guba"
-- [ ] write the crawler for stock news in eastmoney
+- [x] find out a management of  `id` of `Worker` and `Task` 
+- [x] write the crawler for stock articles in "eastmoney guba"
+- [x] write the crawler for comments of articles in "eastmoney guba"
+
+
 - [ ] management of data queue and database
+- [ ] management of request strategies and configs
+- [ ] test crawler
+- [ ] check the validity for meta crawler
+- [ ] check the validity for stocks quit from market
+- [ ] write the crawler for daily tick trading event
+- [ ] write the crawler for stock news in eastmoney
 - [ ] write the crawler for stock reports(text)
 - [ ] write the crawler for news and comment in weibo
 - [ ] write `clean_all` log in `util.Log`
-- [x] find out a management of  `id` of `Worker` and `Task` 
-- [ ] check the validity for meta crawler
-- [ ] check the validity for stocks quit from market
 - [ ] refactor crawlers: abstract a crawler entity
 
 

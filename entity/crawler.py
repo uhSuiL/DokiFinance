@@ -22,9 +22,9 @@ class Crawler(Task):
 
 	def run(self, *args, **kwargs):
 		try:
-			return self.crawl()
+			return self.crawl(*args, **kwargs)
 		except HTTPError or ValueError or UnicodeError:
 			raise RuntimeError(f"""{self._id} Failed: """)  # TODO: comment incomplete
 
-	def crawl(self):
+	def crawl(self, *args, **kwargs):
 		raise NotImplementedError
